@@ -62,6 +62,7 @@ if uploaded_file is not None:
             table_name = extract_name(expression, "Table")
             
             # Determine the final table/view name: Prioritize View over Table
+            # This handles both Kind="View" and Kind="Table" items
             final_table_name = view_name if view_name else table_name
             
             schemas.append(schema)
@@ -70,11 +71,16 @@ if uploaded_file is not None:
         # Create output DataFrame
         df_output = pd.DataFrame({
             'Schema': schemas,
-            'Table Name/View Name': table_names # Renamed column for clarity
+            'Table Name/View Name': table_names 
         })
         
         # Remove duplicates based on Schema and Table Name/View Name
-        df_output = df_output.drop_duplicates(subset=['Schema', 'Table Name/View Name'])
+        df_output = df_output.drop_duplicates(subset=['Schema', 'Table Name/View Name']).reset_index(drop=True)
+        
+        # --- PREVIEW SECTION ADDED HERE ---
+        st.subheader("Extracted Data Sources Preview 🔎")
+        st.dataframe(df_output)
+        # ----------------------------------
         
         # Get filename without extension and trim for sheet name
         filename_without_ext = os.path.splitext(uploaded_file.name)[0]
@@ -89,6 +95,8 @@ if uploaded_file is not None:
             df_output.to_excel(writer, sheet_name=sheet_name, index=False)
         output.seek(0)
         
+        st.success("Processing complete. Click the button to download the full list.")
+        
         st.download_button(
             label="Download Output Excel",
             data=output,
@@ -96,6 +104,5 @@ if uploaded_file is not None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
         
-        st.success("Processing complete. Click the button to download the output.")
     except Exception as e:
         st.error(f"An error occurred: {str(e)}")
