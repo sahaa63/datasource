@@ -46,8 +46,9 @@ if uploaded_file is not None:
         df_filtered = df[df['Expression'].str.contains('Databricks', na=False)]
         
         # Extract schema, table name, and view name for each filtered row
+        # These lists are temporary for processing before concatenation
         schemas = []
-        table_names = []
+        final_names = []
         
         for _, row in df_filtered.iterrows():
             expression = row['Expression']
@@ -61,26 +62,37 @@ if uploaded_file is not None:
             # Extract Table Name (Kind="Table")
             table_name = extract_name(expression, "Table")
             
-            # Determine the final table/view name: Prioritize View over Table
-            # This handles both Kind="View" and Kind="Table" items
-            final_table_name = view_name if view_name else table_name
+            # Determine the final name: Prioritize View over Table
+            final_name = view_name if view_name else table_name
             
             schemas.append(schema)
-            table_names.append(final_table_name)
+            final_names.append(final_name)
         
-        # Create output DataFrame
-        df_output = pd.DataFrame({
+        # Create an interim DataFrame for concatenation and deduplication
+        df_interim = pd.DataFrame({
             'Schema': schemas,
-            'Table Name/View Name': table_names 
+            'Name': final_names 
         })
         
-        # Remove duplicates based on Schema and Table Name/View Name
-        df_output = df_output.drop_duplicates(subset=['Schema', 'Table Name/View Name']).reset_index(drop=True)
+        # --- CONCATENATION AND DEDUPLICATION CHANGE ---
         
-        # --- PREVIEW SECTION ADDED HERE ---
+        # 1. Combine Schema and Name into a single string column: 'Schema.Table/View Name'
+        # This is where the old final output format is created
+        df_interim['Schema.Table/View Name'] = df_interim['Schema'] + '.' + df_interim['Name']
+        
+        # 2. Create the final output DataFrame with only the required single column
+        df_output = df_interim[['Schema.Table/View Name']]
+        
+        # 3. Remove duplicates based on the combined column
+        df_output = df_output.drop_duplicates().reset_index(drop=True)
+
+        # ---------------------------------------------
+        
+        # --- PREVIEW SECTION ---
         st.subheader("Extracted Data Sources Preview 🔎")
+        
+        # Only display the single column
         st.dataframe(df_output)
-        # ----------------------------------
         
         # Get filename without extension and trim for sheet name
         filename_without_ext = os.path.splitext(uploaded_file.name)[0]
@@ -92,6 +104,7 @@ if uploaded_file is not None:
         # Create in-memory Excel file
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            # Write the single-column DataFrame
             df_output.to_excel(writer, sheet_name=sheet_name, index=False)
         output.seek(0)
         
